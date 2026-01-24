@@ -49,6 +49,5 @@ EOF
 
 systemctl restart systemd-timesyncd
 systemctl enable systemd-timesyncd
-timedatectl set-ntp true
+timedatectl set-ntp true 2> /dev/null
 timedatectl timesync-status
-timedatectl

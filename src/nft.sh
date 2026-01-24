@@ -192,10 +192,10 @@ table inet main {
 EOF
 
 if ! command -v ulogd >/dev/null 2>&1; then
-    apt update && apt install ulogd2 -y
+    apt-get update && apt-get install ulogd2 -y || exit 1
 fi
 
-cp /etc/ulogd.conf /etc/ulogd.conf.bak
+cp /etc/ulogd.conf /etc/ulogd.conf.bak 2> /dev/null
 cat <<'EOF' > /etc/ulogd.conf
 [global]
 logfile="syslog"
