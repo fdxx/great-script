@@ -127,7 +127,8 @@ bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads
 
 ## Turn off auto selection after pasting
 sed -i "/enable-bracketed-paste/d" /etc/profile
-echo "bind 'set enable-bracketed-paste off'" >> /etc/profile
+sed -i "/enable-bracketed-paste/d" /etc/inputrc
+echo 'set enable-bracketed-paste off' >> /etc/inputrc
 
 
 ## IPv4 preferred
