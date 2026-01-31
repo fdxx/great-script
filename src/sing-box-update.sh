@@ -65,6 +65,8 @@ cd "$HOME/apps/sing-box"
 rm -rf tempdown && mkdir tempdown
 wget -O tempdown/sing-box.tar.gz "https://github.com/SagerNet/sing-box/releases/download/v$VERSION/sing-box-$VERSION-linux-amd64.tar.gz" || exit 1
 tar -xf tempdown/sing-box.tar.gz -C tempdown
+cp sing-box sing-box.bak 2> /dev/null
+[ -n "$RESETCMD" ] && $RESETCMD stop sing-box
 cp "tempdown/sing-box-$VERSION-linux-amd64/sing-box" .
 chmod +x sing-box
 ./sing-box version
