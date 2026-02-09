@@ -41,8 +41,8 @@ fi
 
 apt-get update && apt-get install -y g++-multilib git make clang${VERSION} lldb${VERSION} lld${VERSION} clangd${VERSION} || exit 1
 
+sed -i "\|^export PATH=/usr/lib/llvm-|d" /etc/profile
 if [ -n "$VERSION" ]; then
-    sed -i "\|^export PATH=/usr/lib/llvm-|d" /etc/profile
     echo "export PATH=/usr/lib/llvm${VERSION}/bin:\$PATH" >> /etc/profile
 fi
 
