@@ -35,7 +35,7 @@ VERSION=$(GetArgValueEx "version" "")
 [ -n "$VERSION" ] && VERSION="-$VERSION"
 
 if (( "$PURGE" > 0 )); then
-    apt-get purge "clang*" "llvm*" "lldb*" "lld*" "clangd*" "g++*" -y || exit 1
+    apt-get purge "clang*" "llvm*" "lldb*" "lld*" "clangd*" "g++*" "libc++*" -y || exit 1
     apt-get autoremove --purge -y || exit 1
 fi
 
