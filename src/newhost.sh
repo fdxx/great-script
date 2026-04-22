@@ -136,6 +136,10 @@ sed -i "/^precedence ::ffff:0:0/d" /etc/gai.conf
 echo 'precedence ::ffff:0:0/96 100' >> /etc/gai.conf
 
 
+## safe rm command
+bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/srm-inst.sh) || exit 1
+
+
 ## Root user terminal colors
 ## extracted from normal users
 cp /root/.bashrc /root/.bashrc.bak
