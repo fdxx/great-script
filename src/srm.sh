@@ -72,6 +72,25 @@ is_protected() {
     return 1
 }
 
+# Check if target and trash are on different filesystems
+is_cross_filesystem() {
+    local target="$1"
+    local target_dev trash_dev
+    
+    # Get device ID of target (works for both files and directories)
+    target_dev=$(stat -c '%d' "$target" 2>/dev/null) || return 1
+    
+    # Get device ID of trash directory
+    trash_dev=$(stat -c '%d' "$TRASH_DIR" 2>/dev/null) || return 1
+    
+    # Compare device IDs
+    if [ "$target_dev" != "$trash_dev" ]; then
+        return 0  # Different filesystems
+    else
+        return 1  # Same filesystem
+    fi
+}
+
 for target in "$@"; do
     if [ ! -e "$target" ]; then
         echo "srm: '$target' does not exist."
@@ -86,6 +105,13 @@ for target in "$@"; do
     if [ "$force_delete" = true ]; then
         rm -rf -- "$target"
         echo "Permanently deleted '$target'"
+        continue
+    fi
+
+    # Check for cross-filesystem operation
+    if is_cross_filesystem "$target"; then
+        echo "srm: refusing to move '$target'"
+        echo "      crosses filesystem Use 'rm -rf' or '-f' flag for permanent deletion."
         continue
     fi
 
