@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ###############################################################################
-###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh)  --timezone="Asia/Shanghai" --ntpserver="time.apple.com"
+###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh)  --timezone="Asia/Singapore" --ntpserver="time.apple.com"
 ###############################################################################
 
 ## GetArgValueEx <key> [defvalue]
@@ -29,7 +29,7 @@ function GetArgValueEx()
     return 1
 }
 
-TIMEZONE=$(GetArgValueEx "timezone" "Asia/Shanghai")
+TIMEZONE=$(GetArgValueEx "timezone" "Asia/Singapore")
 NTPSERVER=$(GetArgValueEx "ntpserver" "time.apple.com")
 
 timedatectl set-timezone $TIMEZONE

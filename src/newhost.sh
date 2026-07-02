@@ -123,7 +123,7 @@ EOF
 
 
 ## timesync
-bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh) || exit 1
+bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh) --timezone="Asia/Singapore" || exit 1
 
 ## Turn off auto selection after pasting
 sed -i "/enable-bracketed-paste/d" /etc/profile
