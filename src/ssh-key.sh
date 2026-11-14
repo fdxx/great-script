@@ -6,5 +6,5 @@
 
 mkdir -p $HOME/.ssh
 cp "$HOME/.ssh/authorized_keys" "$HOME/.ssh/authorized_keys.bak" 2> /dev/null
-echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEC9OFOjZx7Z6/fdFbQUvS0X2F2GZhQYp0AyFLR7aSYB river' > "$HOME/.ssh/authorized_keys"
+echo 'sssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAICrQo0HCTTT/zcRxdYi2tGprhzG6BNpuD3ZkRlzshajd river' > "$HOME/.ssh/authorized_keys"
 
