@@ -117,7 +117,28 @@ EOF
 )
 
 
-## 每个地址一行 Address=，网关写入 [Route] 才能使 GatewayOnLink 生效
+## Ip4ToInt <IP>
+function Ip4ToInt()
+{
+    local A B C D
+    IFS=. read -r A B C D <<< "$1"
+    echo $(( (A << 24) | (B << 16) | (C << 8) | D ))
+}
+
+## IsSameSubnet <GW> 网关是否与某个地址同网段，IPv6 网关总是链路本地地址
+function IsSameSubnet()
+{
+    local GW="$1" ADDR MASK
+    [[ "$GW" == fe80* ]] && return 0
+    for ADDR in $IPV4; do
+        MASK=$(( (0xFFFFFFFF << (32 - ${ADDR#*/})) & 0xFFFFFFFF ))
+        (( ($(Ip4ToInt "${ADDR%/*}") & MASK) == ($(Ip4ToInt "$GW") & MASK) )) && return 0
+    done
+    return 1
+}
+
+## 每个地址一行 Address=，同网段网关直接写入 [Network]，
+## 否则写入 [Route] 才能使 GatewayOnLink 生效
 function StaticConf()
 {
     local ADDR GW
@@ -128,7 +149,10 @@ function StaticConf()
         printf 'Address=%s\n' "$ADDR"
     done
     for GW in $IPV4_GW $IPV6_GW; do
-        printf '\n[Route]\nGateway=%s\nGatewayOnLink=yes\n' "$GW"
+        IsSameSubnet "$GW" && printf 'Gateway=%s\n' "$GW"
+    done
+    for GW in $IPV4_GW $IPV6_GW; do
+        IsSameSubnet "$GW" || printf '\n[Route]\nGateway=%s\nGatewayOnLink=yes\n' "$GW"
     done
 }
 
