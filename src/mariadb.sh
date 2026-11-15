@@ -1,16 +1,25 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/mariadb.sh) 
 ###############################################################################
 
-if dpkg -s mariadb-server >/dev/null 2>&1; then
-    echo "MariaDB Server is already installed."
-    exit 1
-fi
+function CheckPkgOrExit()
+{
+    local pkg="$1" status
+    status=$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null || true)
+    if [[ "$status" == "installed" ]]; then
+        echo "$pkg has already installed by Debian package!"
+        exit 0
+    fi
+}
 
-apt-get update && apt-get install mariadb-server -y || exit 1
-mariadb-secure-installation
+CheckPkgOrExit mariadb-server
+
+apt-get update
+apt-get install mariadb-server -y
 
 cat <<'EOF' > /etc/mysql/mariadb.conf.d/99-server.cnf
 [mysqld]
@@ -20,4 +29,3 @@ EOF
 
 systemctl restart mariadb.service
 echo "done!"
-

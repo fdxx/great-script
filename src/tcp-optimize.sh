@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/tcp-optimize.sh) --bbr=1
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -29,7 +31,7 @@ function GetArgValueEx()
     return 1
 }
 
-BBR=$(GetArgValueEx "bbr") || exit 1
+BBR=$(GetArgValueEx "bbr")
 
 if [ -f /etc/sysctl.conf ]; then
     sed -i "/^net.ipv4.tcp_slow_start_after_idle/d" /etc/sysctl.conf
@@ -62,3 +64,4 @@ if (( "$BBR" > 0 )); then
 fi
 
 sysctl -p /etc/sysctl.d/90-tcp-optimize.conf
+echo 'done!'

@@ -4,6 +4,8 @@
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/nft.sh) --port_allow="22,443,11000-11020"
 ###############################################################################
 
+set -euo pipefail
+
 ## GetArgValueEx <key> [defvalue]
 ## ./script --key=value
 g_args=("$@")
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -32,8 +34,7 @@ function GetArgValueEx()
 ## <-4|-6>
 function GetSelfIP()
 {
-    echo "$(curl $1 -s ip.sb)"
-    return 0
+    curl "$1" -fsS --max-time 10 https://api.ip.sb/ip
 }
 
 ## <-4|-6> <ip>
@@ -47,7 +48,8 @@ function GetNeighRange()
         return 0
     fi
     
-    local RESULT=$(ip $FAMILY a | grep "$IP" | awk '{print $2}')
+    local RESULT
+    RESULT=$(ip $FAMILY a | grep -wF "$IP" | awk '{print $2}' | head -1 || true)
     if [ -n "$RESULT" ]; then
         echo "$RESULT"
         return 0
@@ -63,11 +65,9 @@ function GetNeighRange()
 }
 
 ## <-4|-6>
-function GetGatway()
+function GetDefaultGateway()
 {
-    local RESULT=$(ip $1 route show default | awk -F"via " '{print $2}' | awk '{print $1}')
-    echo "$RESULT"
-    return 0
+    ip $1 route show default | awk -F"via " '{print $2}' | awk 'NF {print $1}' | sort -u | paste -sd ',' - | sed 's/,/, /g'
 }
 
 function GetSpamIP()
@@ -88,31 +88,33 @@ function GetSpamIP()
 PORT_ALLOW=$(GetArgValueEx "port_allow") || exit 1
 NFTCONF=$(GetArgValueEx "nftconf" "/etc/nftables.conf")
 
-SELF_V4=$(GetSelfIP -4)
-BUFFER=$(GetGatway -4)
+SELF_IP4=$(GetSelfIP -4)
+SELF_IP6=$(GetSelfIP -6 || true)
+
+SELF_V4="$SELF_IP4"
+BUFFER=$(GetDefaultGateway -4)
 [ -n "$BUFFER" ] && SELF_V4="$SELF_V4, $BUFFER"
 
 SELF_V6="100::1"
-BUFFER=$(GetSelfIP -6)
-[ -n "$BUFFER" ] && SELF_V6="$BUFFER"
-BUFFER=$(GetGatway -6)
+[ -n "$SELF_IP6" ] && SELF_V6="$SELF_IP6"
+BUFFER=$(GetDefaultGateway -6)
 [ -n "$BUFFER" ] && SELF_V6="$SELF_V6, $BUFFER"
 
 
 SPAM_V4='66.132.159.0/24, 162.142.125.0/24, 167.94.138.0/24, 167.94.145.0/24, 167.94.146.0/24, 167.248.133.0/24, 199.45.154.0/24, 199.45.155.0/24, 206.168.34.0/24, 206.168.35.0/24'
-BUFFER=$(GetNeighRange -4 "$(GetSelfIP -4)")
+BUFFER=$(GetNeighRange -4 "$SELF_IP4")
 [ -n "$BUFFER" ] && SPAM_V4="$BUFFER, $SPAM_V4"
 BUFFER=$(GetSpamIP)
 [ -n "$BUFFER" ] && SPAM_V4="$SPAM_V4, $BUFFER"
 
 
 SPAM_V6='2602:80d:1000:b0cc:e::/80, 2620:96:e000:b0cc:e::/80, 2602:80d:1003::/112, 2602:80d:1004::/112'
-BUFFER=$(GetNeighRange -6 "$(GetSelfIP -6)")
+BUFFER=$(GetNeighRange -6 "$SELF_IP6")
 [ -n "$BUFFER" ] && SPAM_V6="$BUFFER, $SPAM_V6"
 
-OLDCONF="${NFTCONF}.$(date '+%Y%m%d%H%M%S').bak"
-cp "$NFTCONF" "$OLDCONF"
-cat <<EOF > "$NFTCONF"
+NEWCONF=$(mktemp)
+trap 'rm -f -- "$NEWCONF"' EXIT
+cat <<EOF > "$NEWCONF"
 #!/usr/sbin/nft -f
 
 flush ruleset
@@ -195,7 +197,9 @@ if ! command -v ulogd >/dev/null 2>&1; then
     apt-get update && apt-get install ulogd2 -y || exit 1
 fi
 
-cp /etc/ulogd.conf /etc/ulogd.conf.bak 2> /dev/null
+if [ -f /etc/ulogd.conf ]; then
+    cp /etc/ulogd.conf /etc/ulogd.conf.bak
+fi
 cat <<'EOF' > /etc/ulogd.conf
 [global]
 logfile="syslog"
@@ -212,7 +216,13 @@ EOF
 systemctl enable ulogd2
 systemctl restart ulogd2
 
+nft -c -f "$NEWCONF"
+if [ -f "$NFTCONF" ]; then
+    OLDCONF="${NFTCONF}.$(date '+%Y%m%d%H%M%S').bak"
+    cp "$NFTCONF" "$OLDCONF"
+    git --no-pager diff --no-index "$OLDCONF" "$NEWCONF" || true
+fi
+install -m755 "$NEWCONF" "$NFTCONF"
 systemctl enable nftables
-nft -c -f "$NFTCONF"
-git --no-pager diff "$OLDCONF" "$NFTCONF"
 echo "need run: systemctl restart nftables"
+echo 'done!'

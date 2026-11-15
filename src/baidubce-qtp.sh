@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    查询百度云共享流量包详情
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/baidubce-qtp.sh) <ACCESS_KEY_ID> <SECRET_ACCESS_KEY> <TP_ID> [REGION]
 ###############################################################################
 
-set -euo pipefail
 
 ## CheckInstCmd <cmd> [packname]
 function CheckInstCmd()
@@ -21,9 +22,10 @@ function CheckInstCmd()
 
     if ! command -v "$cmd" >/dev/null 2>&1; then
         if (( APT_UPDATED == 0 )); then
-            apt-get update && APT_UPDATED=1 || return 1
+            apt-get update
+            APT_UPDATED=1
         fi
-        apt-get install "$packname" -y || return 1
+        apt-get install "$packname" -y
     fi
 
     return 0
@@ -41,7 +43,9 @@ if [[ -z "$ACCESS_KEY_ID" || -z "$SECRET_ACCESS_KEY" || -z "$TP_ID" ]]; then
   exit 1
 fi
 
-CheckInstCmd "jq" || exit 1
+CheckInstCmd "jq"
+CheckInstCmd "curl"
+CheckInstCmd "openssl"
 
 # ---------- 请求基本参数 ----------
 HOST="eip.${REGION}.baidubce.com"
@@ -64,6 +68,7 @@ hmac_sha256() {
 # percent-encode 单个字符串（不含路径斜杠）
 # 保留 RFC 3986 非保留字符: A-Z a-z 0-9 - _ . ~
 urlencode() {
+  local LC_ALL=C
   local input="$1" output="" i char byte
   for (( i=0; i<${#input}; i++ )); do
     char="${input:$i:1}"
@@ -78,6 +83,7 @@ urlencode() {
 
 # percent-encode URI 路径，保留斜杠
 urlencode_path() {
+  local LC_ALL=C
   local input="$1" output="" i char byte
   for (( i=0; i<${#input}; i++ )); do
     char="${input:$i:1}"
@@ -130,7 +136,7 @@ echo "  时间: ${TIMESTAMP}"
 echo "=============================="
 echo ""
 
-RESPONSE=$(curl -s -w "\n%{http_code}" \
+RESPONSE=$(curl -sS -w "\n%{http_code}" \
   -X GET \
   "https://${HOST}${URI}" \
   -H "Host: ${HOST}" \
@@ -138,8 +144,8 @@ RESPONSE=$(curl -s -w "\n%{http_code}" \
   -H "Content-Type: application/json" \
   -H "Authorization: ${AUTHORIZATION}")
 
-HTTP_BODY=$(echo "$RESPONSE" | head -n -1)
-HTTP_CODE=$(echo "$RESPONSE" | tail -n 1)
+HTTP_BODY=${RESPONSE%$'\n'*}
+HTTP_CODE=${RESPONSE##*$'\n'}
 
 if [[ "$HTTP_CODE" != "200" ]]; then
   echo "HTTP 状态码: ${HTTP_CODE}  (错误)"
@@ -162,7 +168,7 @@ EXPIRE=$(echo "$HTTP_BODY"   | jq -r '.expireTime')
 CAP_MB=$(awk   -v v="$CAPACITY" 'BEGIN {printf "%.2f", v / 1048576}')
 USED_MB=$(awk  -v v="$USED"     'BEGIN {printf "%.2f", v / 1048576}')
 FREE_MB=$(awk  -v c="$CAPACITY" -v u="$USED" 'BEGIN {printf "%.2f", (c - u) / 1048576}')
-USED_PCT=$(awk -v c="$CAPACITY" -v u="$USED" 'BEGIN {printf "%.1f",  u / c * 100}')
+USED_PCT=$(awk -v c="$CAPACITY" -v u="$USED" 'BEGIN {printf "%.1f", c == 0 ? 0 : u / c * 100}')
 
 # ---------- 状态着色 ----------
 if [[ "$STATUS" == "RUNNING" ]]; then
@@ -185,3 +191,4 @@ echo    "  创建时间  : ${CREATE}"
 echo    "  激活时间  : ${ACTIVE}"
 echo    "  过期时间  : ${EXPIRE}"
 echo ""
+echo 'done!'

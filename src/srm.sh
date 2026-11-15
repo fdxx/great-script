@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 TRASH_DIR="$HOME/.trash"
 mkdir -p "$TRASH_DIR"
 
@@ -51,6 +53,9 @@ fi
 
 is_protected() {
     local abs_target
+    if [[ -L "$1" && "$1" != */ ]]; then
+        return 1
+    fi
     abs_target=$(readlink -f "$1") || return 0
 
     local protected_paths=(
@@ -62,8 +67,9 @@ is_protected() {
         "/boot"
     )
 
+    local p abs_p
     for p in "${protected_paths[@]}"; do
-        local abs_p=$(readlink -f "$p")
+        abs_p=$(readlink -f "$p") || return 0
         if [[ "$abs_target" == "$abs_p" ]]; then
             return 0
         fi
@@ -91,14 +97,17 @@ is_cross_filesystem() {
     fi
 }
 
+STATUS=0
 for target in "$@"; do
-    if [ ! -e "$target" ]; then
+    if [[ ! -e "$target" && ! -L "$target" ]]; then
         echo "srm: '$target' does not exist."
+        STATUS=1
         continue
     fi
 
     if is_protected "$target"; then
         echo "srm: refusing to remove protected path '$target'"
+        STATUS=1
         continue
     fi
 
@@ -112,20 +121,23 @@ for target in "$@"; do
     if is_cross_filesystem "$target"; then
         echo "srm: refusing to move '$target'"
         echo "      crosses filesystem Use 'rm -rf' or '-f' flag for permanent deletion."
+        STATUS=1
         continue
     fi
 
     filename=$(basename -- "$target")
     dest="$TRASH_DIR/$filename"
 
-    if [ -e "$dest" ]; then
+    if [[ -e "$dest" || -L "$dest" ]]; then
         suffix="$(date +"%Y%m%d%H%M%S_%N")"
         dest="${dest}_${suffix}"
     fi
 
-    if mv -- "$target" "$dest"; then
+    if mv -T -- "$target" "$dest"; then
         echo "Moved to trash: '$target'"
     else
         echo "srm: failed to move '$target'. Check permissions." >&2
+        STATUS=1
     fi
 done
+exit "$STATUS"

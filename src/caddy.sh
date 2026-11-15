@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/caddy.sh)
 ###############################################################################
@@ -18,24 +20,26 @@ function CheckInstCmd()
 
     if ! command -v "$cmd" >/dev/null 2>&1; then
         if (( APT_UPDATED == 0 )); then
-            apt-get update && APT_UPDATED=1 || return 1
+            apt-get update
+            APT_UPDATED=1
         fi
-        apt-get install "$packname" -y || return 1
+        apt-get install "$packname" -y
     fi
 
     return 0
 }
 
-CheckInstCmd "jq" || exit 1
-VERSION=$(curl -fsSL "https://api.github.com/repos/fdxx/caddy_builder/releases/latest" | jq -r '.assets[] | select(.browser_download_url | test("_linux_amd64.tar.gz")).browser_download_url') || exit 1
+CheckInstCmd "jq"
+VERSION=$(curl -fsSL "https://api.github.com/repos/fdxx/caddy_builder/releases/latest" | jq -er '.assets[] | select(.name | endswith("_linux_amd64.tar.gz")) | .browser_download_url')
 
 mkdir -p "$HOME/apps/caddy"
 cd "$HOME/apps/caddy"
-wget -O caddy.tar.gz "$VERSION" || exit 1
-tar -xf caddy.tar.gz
-chmod +x caddy
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+wget -O "$WORK_DIR/caddy.tar.gz" "$VERSION"
+tar -xf "$WORK_DIR/caddy.tar.gz" -C "$WORK_DIR"
+install -m755 "$WORK_DIR/caddy" caddy
 ./caddy version
-rm -rf caddy.tar.gz
 
 cat <<'EOF' > caddyfile.example
 {
@@ -61,3 +65,5 @@ https://www.exp.com:10001 {
 	}
 }
 EOF
+
+echo 'done!'

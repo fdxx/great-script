@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/realm.sh)
 ###############################################################################
@@ -7,13 +9,16 @@
 mkdir -p "$HOME/apps/realm"
 cd "$HOME/apps/realm"
 
-wget -O "realm.tar.gz" "https://github.com/zhboner/realm/releases/latest/download/realm-x86_64-unknown-linux-gnu.tar.gz" || exit 1
-tar -xf realm.tar.gz
-chmod +x realm
-rm -rf realm.tar.gz
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+wget -O "$WORK_DIR/realm.tar.gz" "https://github.com/zhboner/realm/releases/latest/download/realm-x86_64-unknown-linux-gnu.tar.gz"
+tar -xf "$WORK_DIR/realm.tar.gz" -C "$WORK_DIR"
+install -m755 "$WORK_DIR/realm" realm
 ./realm -v
 
-cat <<'EOF' > config.json
+## 升级时保留已有配置
+if [ ! -f config.json ]; then
+    cat <<'EOF' > config.json
 {
     "log": {
         "level": "warn",
@@ -32,3 +37,5 @@ cat <<'EOF' > config.json
     ]
 }
 EOF
+fi
+echo 'done!'

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh)  --timezone="Asia/Singapore" --ntpserver="time.apple.com"
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -32,14 +34,17 @@ function GetArgValueEx()
 TIMEZONE=$(GetArgValueEx "timezone" "Asia/Singapore")
 NTPSERVER=$(GetArgValueEx "ntpserver" "time.apple.com")
 
-timedatectl set-timezone $TIMEZONE
+timedatectl set-timezone "$TIMEZONE"
 
 if ! dpkg -s systemd-timesyncd >/dev/null 2>&1; then
-    apt-get update && apt-get install systemd-timesyncd -y || exit 1
+    apt-get update
+    apt-get install systemd-timesyncd -y
 fi
 
 ## https://manpages.debian.org/stable/systemd-timesyncd/timesyncd.conf.5.en.html
-cp "/etc/systemd/timesyncd.conf" "/etc/systemd/timesyncd.conf.bak" 2> /dev/null
+if [ -f /etc/systemd/timesyncd.conf ]; then
+    cp /etc/systemd/timesyncd.conf /etc/systemd/timesyncd.conf.bak
+fi
 cat <<EOF > "/etc/systemd/timesyncd.conf"
 [Time]
 NTP=$NTPSERVER
@@ -51,3 +56,4 @@ systemctl restart systemd-timesyncd
 systemctl enable systemd-timesyncd
 timedatectl set-ntp true 2> /dev/null
 timedatectl timesync-status
+echo 'done!'

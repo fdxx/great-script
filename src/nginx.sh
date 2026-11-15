@@ -1,15 +1,25 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/nginx.sh) 
 ###############################################################################
 
-if dpkg -s nginx >/dev/null 2>&1; then
-    echo "nginx is already installed."
-    exit 1
-fi
+function CheckPkgOrExit()
+{
+    local pkg="$1" status
+    status=$(dpkg-query -W -f='${db:Status-Status}' "$pkg" 2>/dev/null || true)
+    if [[ "$status" == "installed" ]]; then
+        echo "$pkg has already installed by Debian package!"
+        exit 0
+    fi
+}
 
-apt-get update && apt-get install nginx -y || exit 1
+CheckPkgOrExit nginx
+
+apt-get update
+apt-get install nginx -y
 
 mkdir -p /etc/nginx/logs
 mkdir -p /etc/nginx/cert
@@ -149,6 +159,6 @@ EOF
 [ ! -d "$HOME/nginxdir" ] && ln -s /etc/nginx "$HOME/nginxdir"
 
 systemctl enable nginx
-nginx -t || exit 1
+nginx -t
 systemctl restart nginx
 echo "done!"

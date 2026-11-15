@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/msedit.sh)
 ###############################################################################
@@ -18,21 +20,25 @@ function CheckInstCmd()
 
     if ! command -v "$cmd" >/dev/null 2>&1; then
         if (( APT_UPDATED == 0 )); then
-            apt-get update && APT_UPDATED=1 || return 1
+            apt-get update
+            APT_UPDATED=1
         fi
-        apt-get install "$packname" -y || return 1
+        apt-get install "$packname" -y
     fi
 
     return 0
 }
 
-CheckInstCmd "jq" || exit 1
-VERSION=$(curl -fsSL "https://api.github.com/repos/microsoft/edit/releases/latest" | jq -r '.assets[] | select(.browser_download_url | test("-x86_64-linux-gnu.tar.zst")).browser_download_url') || exit 1
+CheckInstCmd "jq"
+CheckInstCmd "zstd"
+VERSION=$(curl -fsSL "https://api.github.com/repos/microsoft/edit/releases/latest" | jq -er '.assets[] | select(.name | endswith("-x86_64-linux-gnu.tar.gz")) | .browser_download_url')
 
-wget -O edit.tar.zst "$VERSION" || exit 1
-tar -I zstd -xf edit.tar.zst
-chmod +x edit
-mv edit /usr/bin/msedit
-msedit -v 
-
-rm -rf edit.tar.zst
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+wget -O "$WORK_DIR/edit.tar.gz" "$VERSION"
+tar -xf "$WORK_DIR/edit.tar.gz" -C "$WORK_DIR"
+install -Dm755 "$WORK_DIR/edit" /opt/msedit/msedit
+ln -sfnT /opt/msedit/msedit /usr/local/bin/msedit
+rm -fv /usr/bin/msedit
+/opt/msedit/msedit --version
+echo 'done!'

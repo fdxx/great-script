@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/nezha-agent.sh)
 ###############################################################################
@@ -7,21 +9,21 @@
 ## GetArgValueEx <key> [defvalue]
 ## ./script --key=value
 g_args=("$@")
-function GetArgValueEx1()
+function GetArgValueEx()
 {
     local key="$1"
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -29,18 +31,26 @@ function GetArgValueEx1()
     return 1
 }
 
-NZ_SERVER=$(GetArgValueEx1 "NZ_SERVER") || exit 1
-NZ_CLIENT_SECRET=$(GetArgValueEx1 "NZ_CLIENT_SECRET") || exit 1
-NZ_TLS=$(GetArgValueEx1 "NZ_TLS" "true")
-NZ_UUID=$(cat /proc/sys/kernel/random/uuid)
-NZ_UUID=$(GetArgValueEx1 "NZ_UUID" "$NZ_UUID")
-
+NZ_SERVER=$(GetArgValueEx "NZ_SERVER")
+NZ_CLIENT_SECRET=$(GetArgValueEx "NZ_CLIENT_SECRET")
+NZ_TLS=$(GetArgValueEx "NZ_TLS" "true")
 
 mkdir -p "$HOME/apps/nezha/agent"
 cd "$HOME/apps/nezha/agent"
 
-wget -O "nezha-agent.zip" "https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_amd64.zip" || exit 1
-unzip nezha-agent.zip
+## 重装时沿用旧 UUID，避免面板出现新机器
+if [ -f config.yaml ]; then
+    NZ_UUID=$(awk '/^uuid:/ {print $2}' config.yaml)
+else
+    NZ_UUID=$(cat /proc/sys/kernel/random/uuid)
+fi
+NZ_UUID=$(GetArgValueEx "NZ_UUID" "$NZ_UUID")
+
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+wget -O "$WORK_DIR/nezha-agent.zip" "https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_amd64.zip"
+unzip -o "$WORK_DIR/nezha-agent.zip" -d "$WORK_DIR"
+install -m755 "$WORK_DIR/nezha-agent" nezha-agent
 
 cat <<EOF > config.yaml
 client_secret: $NZ_CLIENT_SECRET
@@ -65,7 +75,5 @@ use_gitee_to_upgrade: false
 use_ipv6_country_code: false
 EOF
 
-chmod +x nezha-agent
 ./nezha-agent -v
-
-rm -rf nezha-agent.zip
+echo 'done!'

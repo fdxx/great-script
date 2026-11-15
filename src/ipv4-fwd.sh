@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/ipv4-fwd.sh)
 ###############################################################################
@@ -9,3 +11,5 @@
 
 echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.d/90-fwd.conf
 sysctl -p /etc/sysctl.d/90-fwd.conf
+echo 'done!'
+

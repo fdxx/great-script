@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/dnss.sh) --upstream=https://1.1.1.1/dns-query
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -29,17 +31,21 @@ function GetArgValueEx()
     return 1
 }
 
-if ss -tuln | grep -q ":53"; then
+LISTENERS=$(ss -H -tuln 'sport = :53')
+if [[ -n "$LISTENERS" ]]; then
     echo "Port 53 is already in use."
     exit 1
 fi
 
-UPSTREAM=$(GetArgValueEx "upstream" "https://1.1.1.1/dns-query") || exit 1
-apt-get update && apt-get install dnss -y || exit 1
+UPSTREAM=$(GetArgValueEx "upstream" "https://1.1.1.1/dns-query")
+apt-get update
+apt-get install dnss -y
 
 systemctl disable dnss.service --now
 systemctl disable dnss.socket --now
-systemctl disable cloudflared-doh.service --now 2> /dev/null
+if systemctl cat cloudflared-doh.service >/dev/null 2>&1; then
+    systemctl disable cloudflared-doh.service --now
+fi
 
 cat <<EOF > /etc/systemd/system/dnss.service
 [Unit]
@@ -66,9 +72,16 @@ if [ -f /etc/dhcp/dhclient.conf ]; then
    echo 'supersede domain-name-servers 127.0.0.1;' >> /etc/dhcp/dhclient.conf
 fi
 
-if ss -tuln | grep -q ":53"; then
-    cp /etc/resolv.conf /etc/resolv.conf.bak
-    echo 'nameserver 127.0.0.1' > /etc/resolv.conf
-    echo 'done'
+## 等待 dnss 开始监听
+for _ in {1..10}; do
+    LISTENERS=$(ss -H -tuln 'sport = :53')
+    [[ -n "$LISTENERS" ]] && break
+    sleep 0.5
+done
+if [[ -z "$LISTENERS" ]]; then
+    echo "dnss is not listening on port 53, resolv.conf unchanged." >&2
+    exit 1
 fi
-
+cp /etc/resolv.conf /etc/resolv.conf.bak
+echo 'nameserver 127.0.0.1' > /etc/resolv.conf
+echo 'done!'

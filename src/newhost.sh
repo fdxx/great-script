@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(busybox wget -qO - https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/newhost.sh) --dns=8.8.4.4 --aptsource=http://deb.debian.org --sshport=22
 ###############################################################################
@@ -14,15 +16,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -53,7 +55,12 @@ source /etc/os-release
 ## https://mirrors.tencent.com
 ## http://deb.debian.org
 APT_SOURCE=$(GetArgValueEx "aptsource" "http://deb.debian.org")
-cp /etc/apt/sources.list /etc/apt/sources.list.bak
+if [ -f /etc/apt/sources.list ]; then
+    cp /etc/apt/sources.list /etc/apt/sources.list.bak
+fi
+if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+    mv /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/debian.sources.bak
+fi
 cat <<EOF > /etc/apt/sources.list
 deb $APT_SOURCE/debian/ $VERSION_CODENAME main non-free-firmware
 deb $APT_SOURCE/debian/ $VERSION_CODENAME-updates main non-free-firmware
@@ -62,14 +69,16 @@ EOF
 
 
 ## Install common software
-apt-get update && apt-get install lsb-release curl wget git zip gnupg ca-certificates bind9-dnsutils vim lsof netcat-openbsd mtr-tiny jq -y || exit 1
+apt-get update
+apt-get install lsb-release curl wget git zip gnupg ca-certificates bind9-dnsutils vim lsof netcat-openbsd mtr-tiny jq -y
 if (( "$VERSION_ID" > 12 )); then
-    apt-get install fastfetch -y || exit 1
+    apt-get install fastfetch -y
 fi
 
 
 ## authorized_keys
-bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/ssh-key.sh) || exit 1
+SSH_KEY_INSTALLER=$(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/ssh-key.sh)
+bash -c "$SSH_KEY_INSTALLER"
 
 ## sshd_config
 ## https://manpages.debian.org/stable/openssh-server/sshd_config.5.en.html
@@ -95,12 +104,16 @@ Subsystem sftp /usr/lib/openssh/sftp-server
 EOF
 
 ## change motd
-cp /etc/motd /etc/motd.bak
+if [ -f /etc/motd ]; then
+    cp /etc/motd /etc/motd.bak
+fi
 echo "" > /etc/motd
+mkdir -p /etc/update-motd.d
 cat <<'EOF' > /etc/update-motd.d/20-showversion
 #!/bin/bash
+set -euo pipefail
 source /etc/os-release
-echo "$PRETTY_NAME $DEBIAN_VERSION_FULL"
+echo "$PRETTY_NAME ${DEBIAN_VERSION_FULL:-$VERSION_ID}"
 EOF
 chmod +x /etc/update-motd.d/20-showversion
 
@@ -123,7 +136,8 @@ EOF
 
 
 ## timesync
-bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh) --timezone="Asia/Singapore" || exit 1
+TIMESYNC_INSTALLER=$(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/timesync.sh)
+bash -c "$TIMESYNC_INSTALLER" -- --timezone="Asia/Singapore"
 
 ## Turn off auto selection after pasting
 sed -i "/enable-bracketed-paste/d" /etc/profile
@@ -137,7 +151,8 @@ echo 'precedence ::ffff:0:0/96 100' >> /etc/gai.conf
 
 
 ## safe rm command
-bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/srm-inst.sh) || exit 1
+SRM_INSTALLER=$(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/srm-inst.sh)
+bash -c "$SRM_INSTALLER"
 
 
 ## Root user terminal colors
@@ -145,7 +160,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads
 cp /root/.bashrc /root/.bashrc.bak
 cat <<'EOF' > /root/.bashrc
 # set a fancy prompt (non-color, unless we know we "want" color)
-case "$TERM" in
+case "${TERM:-}" in
     xterm-color|*-256color) color_prompt=yes;;
 esac
 
@@ -154,7 +169,7 @@ esac
 # should be on the output of commands, not on the prompt
 #force_color_prompt=yes
 
-if [ -n "$force_color_prompt" ]; then
+if [ -n "${force_color_prompt:-}" ]; then
     if [ -x /usr/bin/tput ] && tput setaf 1 >&/dev/null; then
         # We have color support; assume it's compliant with Ecma-48
         # (ISO/IEC-6429). (Lack of such support is extremely rare, and such
@@ -165,7 +180,7 @@ if [ -n "$force_color_prompt" ]; then
     fi
 fi
 
-if [ "$color_prompt" = yes ]; then
+if [ "${color_prompt:-}" = yes ]; then
     PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 else
     PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
@@ -173,7 +188,7 @@ fi
 unset color_prompt force_color_prompt
 
 # If this is an xterm set the title to user@host:dir
-case "$TERM" in
+case "${TERM:-}" in
 xterm*|rxvt*)
     PS1="\[\e]0;${debian_chroot:+($debian_chroot)}\u@\h: \w\a\]$PS1"
     ;;
@@ -200,6 +215,9 @@ if ! shopt -oq posix; then
 fi
 EOF
 
-systemctl restart sshd
-[ -f /usr/bin/fastfetch ] && fastfetch
+sshd -t
+systemctl restart ssh
+if command -v fastfetch >/dev/null 2>&1; then
+    fastfetch
+fi
 echo "done!"

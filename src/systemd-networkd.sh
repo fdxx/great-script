@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/systemd-networkd.sh) --dhcp=0 --iface=eth0
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -29,7 +31,7 @@ function GetArgValueEx()
     return 1
 }
 
-## GetIP <IFACE>
+## GetMAC <IFACE>
 function GetMAC()
 {
     ip link show "$1" | awk '/link\/ether/ {print $2}'
@@ -42,22 +44,21 @@ function GetIP()
     local IFACE="$2"
 
     if [[ "$FAMILY" == "-4" ]]; then
-        ip $FAMILY addr show "$IFACE" | awk '/inet / {print $2}'
-        return 0
+        ip "$FAMILY" addr show "$IFACE" | awk '/inet / {print $2}'
+    else
+        ip "$FAMILY" addr show "$IFACE" scope global | awk '/inet6 / {print $2}'
     fi
-
-    ip $FAMILY addr show "$IFACE" scope global | awk '/inet6 / {print $2}'
 }
 
-## GetIP <-4|-6> <IFACE>
+## GetGateway <-4|-6> <IFACE>
 function GetGateway()
 {
     local FAMILY="$1"
     local IFACE="$2"
-    local RESULT=$(ip $FAMILY route show default dev "$IFACE" | awk -F"via " '{print $2}' | awk '{print $1}')
+    local RESULT IPV6_GW_MAC
+    RESULT=$(ip $FAMILY route show default dev "$IFACE" | awk -F"via " '{print $2}' | awk '{print $1}')
 
     if [[ -z "$RESULT" ]]; then
-        echo ""
         return 1
     fi
 
@@ -71,13 +72,15 @@ function GetGateway()
         return 0
     fi
 
-    local IPV6_GW_MAC=$(ip -6 neigh show dev $IFACE | grep "${RESULT} " | awk -F"lladdr " '{print $2}' | awk '{print $1}')
+    ## 如果v6网关不是链路本地，我们获取链路本地地址
+    IPV6_GW_MAC=$(ip -6 neigh show dev $IFACE | grep "${RESULT} " | awk -F"lladdr " '{print $2}' | awk '{print $1}')
     RESULT=$(ip -6 neigh show dev $IFACE | grep "${IPV6_GW_MAC} " | grep "fe80" | awk '{print $1}')
-    echo "$RESULT"
+    [ -n "$RESULT" ] && echo "$RESULT" || return 1
 }
 
-DHCP=$(GetArgValueEx "dhcp") || exit 1
-IFACE=$(GetArgValueEx "iface") || exit 1
+
+DHCP=$(GetArgValueEx "dhcp")
+IFACE=$(GetArgValueEx "iface")
 
 if ! ip link show "$IFACE" > /dev/null 2>&1; then
     echo "interface $IFACE does not exist."
@@ -87,9 +90,9 @@ fi
 
 MAC=$(GetMAC "$IFACE")
 IPV4=$(GetIP -4 "$IFACE")
-IPV4_GW=$(GetGateway -4 "$IFACE")
+IPV4_GW=$(GetGateway -4 "$IFACE" || true)
 IPV6=$(GetIP -6 "$IFACE")
-IPV6_GW=$(GetGateway -6 "$IFACE")
+IPV6_GW=$(GetGateway -6 "$IFACE" || true)
 
 CONF=$(cat <<EOF
 [Match]
@@ -98,9 +101,6 @@ Type=ether
 
 [Link]
 RequiredForOnline=yes
-
-[Route]
-GatewayOnLink=yes
 
 [Network]
 DHCP=ipv4
@@ -117,33 +117,38 @@ EOF
 )
 
 
-[ "$DHCP" -eq 0 ] && CONF=$(cat <<EOF
-[Match]
-MACAddress=$MAC
-Type=ether
+## 每个地址一行 Address=，网关写入 [Route] 才能使 GatewayOnLink 生效
+function StaticConf()
+{
+    local ADDR GW
+    printf '[Match]\nMACAddress=%s\nType=ether\n\n' "$MAC"
+    printf '[Link]\nRequiredForOnline=yes\n\n'
+    printf '[Network]\nIPv6AcceptRA=false\n'
+    for ADDR in $IPV4 $IPV6; do
+        printf 'Address=%s\n' "$ADDR"
+    done
+    for GW in $IPV4_GW $IPV6_GW; do
+        printf '\n[Route]\nGateway=%s\nGatewayOnLink=yes\n' "$GW"
+    done
+}
 
-[Link]
-RequiredForOnline=yes
-
-[Route]
-GatewayOnLink=yes
-
-[Network]
-Address=$IPV4
-${IPV4_GW:+Gateway=$IPV4_GW}
-IPv6AcceptRA=false
-${IPV6:+Address=$IPV6}
-${IPV6_GW:+Gateway=$IPV6_GW}
-EOF
-)
+if [ "$DHCP" -eq 0 ]; then
+    CONF=$(StaticConf)
+fi
 
 
 FILENAME="/etc/systemd/network/$IFACE.network"
+mkdir -p /etc/systemd/network
 echo "$CONF" > "$FILENAME"
 
-mv /etc/network/interfaces /etc/network/interfaces1.bak 2> /dev/null
-systemctl disable networking.service --now
+if [ -f /etc/network/interfaces ]; then
+    mv /etc/network/interfaces /etc/network/interfaces1.bak
+fi
+if systemctl cat networking.service >/dev/null 2>&1; then
+    systemctl disable networking.service
+fi
 systemctl enable systemd-networkd.service
 
 cat "$FILENAME"
-echo "need: systemctl restart systemd-networkd.service" 
+echo "need: systemctl restart systemd-networkd.service"
+echo 'done!'

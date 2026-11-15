@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/clang.sh) --purge=1
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -30,16 +32,19 @@ function GetArgValueEx()
 }
 
 
-PURGE=$(GetArgValueEx "purge") || exit 1
+PURGE=$(GetArgValueEx "purge")
 VERSION=$(GetArgValueEx "version" "")
-[ -n "$VERSION" ] && VERSION="-$VERSION"
-
-if (( "$PURGE" > 0 )); then
-    apt-get purge "clang*" "llvm*" "lldb*" "lld*" "clangd*" "g++*" "libc++*" -y || exit 1
-    apt-get autoremove --purge -y || exit 1
+if [ -n "$VERSION" ]; then
+    VERSION="-$VERSION"
 fi
 
-apt-get update && apt-get install -y g++-multilib git make clang${VERSION} lldb${VERSION} lld${VERSION} clangd${VERSION} || exit 1
+if (( "$PURGE" > 0 )); then
+    apt-get purge "clang*" "llvm*" "lldb*" "lld*" "clangd*" "g++*" "libc++*" -y
+    apt-get autoremove --purge -y
+fi
+
+apt-get update
+apt-get install -y g++-multilib git make "clang${VERSION}" "lldb${VERSION}" "lld${VERSION}" "clangd${VERSION}"
 
 sed -i "\|^export PATH=/usr/lib/llvm-|d" /etc/profile
 if [ -n "$VERSION" ]; then
@@ -50,5 +55,6 @@ sed -i "/^export CC=/d" /etc/profile
 sed -i "/^export CXX=/d" /etc/profile
 echo 'export CC=clang' >> /etc/profile
 echo 'export CXX=clang++' >> /etc/profile
-source /etc/profile
-clang -v
+echo "-----"
+"clang${VERSION}" -v
+echo 'done!'

@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###    bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/cfdns-create.sh) --zone_id= --cf_token= --domain= --content=
 ###############################################################################
@@ -13,15 +15,15 @@ function GetArgValueEx()
 
     for arg in "${g_args[@]}"
     do
-        if [[ "$arg" == "--$key="* ]]
+        if [[ "$arg" == "$key="* || "$arg" == "--$key="* ]]
         then
-            echo "${arg#*=}"
+            printf '%s\n' "${arg#*=}"
             return 0
         fi
     done
 
     if (( "$#" > 1 )); then
-        echo "$2"
+        printf '%s\n' "$2"
         return 0
     fi
 
@@ -29,10 +31,10 @@ function GetArgValueEx()
     return 1
 }
 
-ZONE_ID=$(GetArgValueEx "zone_id") || exit 1
-CF_TOKEN=$(GetArgValueEx "cf_token") || exit 1
-DOMAIN=$(GetArgValueEx "domain") || exit 1
-CONTENT=$(GetArgValueEx "content") || exit 1
+ZONE_ID=$(GetArgValueEx "zone_id")
+CF_TOKEN=$(GetArgValueEx "cf_token")
+DOMAIN=$(GetArgValueEx "domain")
+CONTENT=$(GetArgValueEx "content")
 TYPE=$(GetArgValueEx "type" "A")
 
 DATA=$(cat <<EOF
@@ -46,7 +48,7 @@ DATA=$(cat <<EOF
 EOF
 )
 
-RESULT=$(curl -fsSL https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records -H 'Content-Type: application/json' -H "Authorization: Bearer $CF_TOKEN" -d "$DATA") || exit 1
+RESULT=$(curl -sSL "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" -H 'Content-Type: application/json' -H "Authorization: Bearer $CF_TOKEN" -d "$DATA")
 
 if command -v "jq" >/dev/null 2>&1; then
     echo "$RESULT" | jq .
@@ -54,3 +56,4 @@ else
     echo "$RESULT"
     echo ""
 fi
+echo 'done!'

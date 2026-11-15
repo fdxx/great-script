@@ -1,5 +1,7 @@
 #!/bin/bash
 
+set -euo pipefail
+
 ###############################################################################
 ###     bash <(curl -fsSL https://raw.githubusercontent.com/fdxx/great-script/refs/heads/main/src/nezha-update.sh)
 ###############################################################################
@@ -11,40 +13,39 @@ then
    exit 1;
 fi
 
-set -eux
 
 function UpdateAgent()
 {
-    wget -O /tmp/nzdl/nezha-agent_linux_amd64 "https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_amd64.zip"
-    unzip /tmp/nzdl/nezha-agent_linux_amd64 -d /tmp/nzdl
-    mv ~/apps/nezha/agent/nezha-agent ~/apps/nezha/agent/nezha-agent.bak
-    mv /tmp/nzdl/nezha-agent ~/apps/nezha/agent/nezha-agent
-    chmod +x ~/apps/nezha/agent/nezha-agent
-    ~/apps/nezha/agent/nezha-agent -v
+    wget -O "$WORK_DIR/nezha-agent.zip" "https://github.com/nezhahq/agent/releases/latest/download/nezha-agent_linux_amd64.zip"
+    unzip -o "$WORK_DIR/nezha-agent.zip" -d "$WORK_DIR"
+    cp "$HOME/apps/nezha/agent/nezha-agent" "$HOME/apps/nezha/agent/nezha-agent.bak"
+    install -m755 "$WORK_DIR/nezha-agent" "$HOME/apps/nezha/agent/nezha-agent"
+    "$HOME/apps/nezha/agent/nezha-agent" -v
     echo "✅done! Need restart nezha-agent"
 }
 
 function UpdateDash()
 {
-    wget -O /tmp/nzdl/dashboard-linux-amd64.zip "https://github.com/nezhahq/nezha/releases/latest/download/dashboard-linux-amd64.zip"
-    unzip /tmp/nzdl/dashboard-linux-amd64.zip -d /tmp/nzdl
-    mv ~/apps/nezha/dash/nezha-dash ~/apps/nezha/dash/nezha-dash.bak
-    mv /tmp/nzdl/dashboard-linux-amd64 ~/apps/nezha/dash/nezha-dash
-    chmod +x ~/apps/nezha/dash/nezha-dash
-    ~/apps/nezha/dash/nezha-dash -v
+    wget -O "$WORK_DIR/dashboard.zip" "https://github.com/nezhahq/nezha/releases/latest/download/dashboard-linux-amd64.zip"
+    unzip -o "$WORK_DIR/dashboard.zip" -d "$WORK_DIR"
+    cp "$HOME/apps/nezha/dash/nezha-dash" "$HOME/apps/nezha/dash/nezha-dash.bak"
+    install -m755 "$WORK_DIR/dashboard-linux-amd64" "$HOME/apps/nezha/dash/nezha-dash"
+    "$HOME/apps/nezha/dash/nezha-dash" -v
     echo "✅done! Need restart nezha-dash"
 }
 
-rm -rf /tmp/nzdl
-mkdir /tmp/nzdl
+case "$1" in
+    agent|dash) ;;
+    *) echo "Use $(basename "$0") <agent|dash>" >&2; exit 1 ;;
+esac
 
-if [ $1 = 'agent' ]
-then
+WORK_DIR=$(mktemp -d)
+trap 'rm -rf -- "$WORK_DIR"' EXIT
+
+if [ "$1" = agent ]; then
     UpdateAgent
-elif [ $1 = 'dash' ]
-then
+else
     UpdateDash
 fi
 
-rm -rf /tmp/nzdl
-
+echo 'done!'
